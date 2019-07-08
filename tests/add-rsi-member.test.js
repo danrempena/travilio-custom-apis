@@ -3,15 +3,16 @@ import jwt from 'jsonwebtoken'
 import each from 'jest-each'
 import hash from 'object-hash'
 import faker from 'faker'
-import { TravilioSystemAddMemberHandler, jobInfo, main } from '../handlers/add-member-handler'
+import { RSISystemAddMemberHandler, jobInfo, main } from '../handlers/add-member-handler'
 import * as mockCloudwatchScheduledEvent from '../mocks/events/cloudwatch-scheduled-event.json'
 import * as mockLambdaReinvokeEvent from '../mocks/events/lambda-reinvoke-event.json'
-import mockRequest from '../mocks/travilio-system/add-member/request'
-import mockResponse from '../mocks/travilio-system/add-member/response'
-import travilioAxios from '../lib/travilio-axios'
-import travilioExpected from '../lib/travilio-expected'
-import msaAxios from '../lib/mpp-sql-adapter-axios'
+import mockRSIRequest from '../mocks/rsi-system/add-member/request'
+import mockRSIResponse from '../mocks/rsi-system/add-member/response'
+import RSIAxios from '../lib/rsi-axios'
+import RSIExpected from '../lib/rsi-expected'
+import mppSQLAxios from '../lib/mpp-sql-adapter-axios'
 import helper from '../lib/helper'
+import { RSIAuthenticate } from '../lib/rsi-access-token'
 
 jest.mock('../lib/helper')
 
@@ -21,10 +22,11 @@ describe('[' + jobInfo.id + '] ' + jobInfo.name, () => {
     ['aws.lambda', mockLambdaReinvokeEvent]
   ]
   const mockMsaAccessToken = jwt.sign({ userId: 1 }, 'secret', { expiresIn: '30d' })
-  const mockMsaLAxios = new MockAdapter(msaAxios)
-  const mockTravilioAxios = new MockAdapter(travilioAxios)
+  const mockRSIAccessToken = jwt.sign({ userId: 1 }, 'secret')
+  const mockMsaLAxios = new MockAdapter(mppSQLAxios)
+  const mockRSIAxios = new MockAdapter(RSIAxios)
   const mockJobContext = {
-    functionName: 'add-travilio-member',
+    functionName: 'add-rsi-member',
     localData: {
       jobInfo: jobInfo
     }
@@ -42,7 +44,7 @@ describe('[' + jobInfo.id + '] ' + jobInfo.name, () => {
   })
 
   beforeEach(() => {
-    mockMPPRequestData = mockRequest.generateMembers(faker.random.number({ min: 1, max: 10 }))
+    mockMPPRequestData = mockRSIRequest.generateMembers(faker.random.number({ min: 1, max: 10 }))
     mockMsaLAxios.onPost('/queries').reply(200, mockMPPRequestData)
     mockLambdaReinvokeEvent.payload = JSON.stringify(mockMPPRequestData)
     mockLambdaReinvokeEvent.md5Payload = hash.MD5(mockLambdaReinvokeEvent.payload)
@@ -52,14 +54,14 @@ describe('[' + jobInfo.id + '] ' + jobInfo.name, () => {
 
   afterEach(() => {
     jest.clearAllMocks()
-    mockTravilioAxios.reset()
+    mockRSIAxios.reset()
     mockMsaLAxios.reset()
     mockMPPRequestData = []
   })
 
   describe('All Test Cases', () => {
     each(testCases).test('%s - mpp adapter should return list of users with format', async (source, mockEvent) => {
-      const handler = new TravilioSystemAddMemberHandler(mockEvent, mockJobContext)
+      const handler = new RSISystemAddMemberHandler(mockEvent, mockJobContext)
       const data = await handler.getJobData()
       const expected = JSON.stringify(data)
       const mocked = JSON.stringify(mockMPPRequestData)
@@ -67,11 +69,15 @@ describe('[' + jobInfo.id + '] ' + jobInfo.name, () => {
     })
 
     each(testCases).test('%s - should have proper data and format for client custom api', async (source, mockEvent) => {
-      mockTravilioAxios.onPost(jobInfo.targetEndpoint).reply(config => {
+      console.log(mockRSIAccessToken)
+      const rsiAccessToken = await RSIAuthenticate()
+      console.log(rsiAccessToken)
+      expect(rsiAccessToken).toEqual(mockRSIAccessToken)
+      mockRSIAxios.onPost(jobInfo.targetEndpoint).reply(config => {
         expect(config.headers['Content-Type']).toEqual('application/json')
-        expect(config.headers['Authorization']).toEqual('Bearer '+'')
+        expect(config.headers['Authorization']).toEqual('Bearer ' + rsiAccessToken)
         const data = JSON.parse(config.data)
-        const expectedFields = Object.keys(travilioExpected[jobInfo.targetEndpoint])
+        const expectedFields = Object.keys(RSIExpected[jobInfo.targetEndpoint])
         const dataKeys = Object.keys(data)
         for (let prop of expectedFields) {
           expect(dataKeys).toContain(prop)
@@ -79,13 +85,13 @@ describe('[' + jobInfo.id + '] ' + jobInfo.name, () => {
         for (let prop of dataKeys) {
           expect(data[prop]).toBeDefined()
         }
-        return [200, mockResponse.success]
+        return [200, mockRSIResponse.success]
       })
-      const handler = new TravilioSystemAddMemberHandler(mockEvent, mockJobContext)
+      const handler = new RSISystemAddMemberHandler(mockEvent, mockJobContext)
       await Promise.all(mockMPPRequestData.map(async (mockSampleData) => {
-        const { status, data } = await handler.addTravilioMember(mockSampleData)
+        const { status, data } = await handler.addRSIMember(mockSampleData)
         expect(status).toEqual(200)
-        expect(data).toEqual(mockResponse.success)
+        expect(data).toEqual(mockRSIResponse.success)
       }))
     })
 
@@ -95,7 +101,7 @@ describe('[' + jobInfo.id + '] ' + jobInfo.name, () => {
       if (source === 'aws.lambda') {
         localEvent.payload = ''
       }
-      const handler = new TravilioSystemAddMemberHandler(localEvent, mockJobContext)
+      const handler = new RSISystemAddMemberHandler(localEvent, mockJobContext)
       const callback = (error, result) => {
         expect(error).toBeTruthy()
         expect(helper.notify_on_error).toHaveBeenCalledTimes(1)
@@ -123,7 +129,7 @@ describe('[' + jobInfo.id + '] ' + jobInfo.name, () => {
           expect(suc).toHaveProperty('result')
         })
       }
-      mockTravilioAxios.onPost(jobInfo.targetEndpoint).reply(200, mockResponse.success)
+      mockRSIAxios.onPost(jobInfo.targetEndpoint).reply(200, mockRSIResponse.success)
       await main(mockCloudwatchScheduledEvent, mockJobContext, callback)
     })
 
@@ -146,7 +152,7 @@ describe('[' + jobInfo.id + '] ' + jobInfo.name, () => {
           mockJobContext.functionName
         )
       }
-      mockTravilioAxios.onPost(jobInfo.targetEndpoint).reply(200, mockResponse.fail)
+      mockRSIAxios.onPost(jobInfo.targetEndpoint).reply(200, mockRSIResponse.fail)
       await main(mockCloudwatchScheduledEvent, mockJobContext, callback)
     })
 
@@ -169,7 +175,7 @@ describe('[' + jobInfo.id + '] ' + jobInfo.name, () => {
           mockJobContext.functionName
         )
       }
-      mockTravilioAxios.onPost(jobInfo.targetEndpoint).networkError()
+      mockRSIAxios.onPost(jobInfo.targetEndpoint).networkError()
       await main(mockCloudwatchScheduledEvent, mockJobContext, callback)
     })
 
@@ -189,7 +195,7 @@ describe('[' + jobInfo.id + '] ' + jobInfo.name, () => {
         expect(helper.notify_on_failed_queue).toHaveBeenCalledTimes(1)
         expect(helper.enqueue_failed_job).not.toHaveBeenCalled()
       }
-      mockTravilioAxios.onPost(jobInfo.targetEndpoint).reply(400, {})
+      mockRSIAxios.onPost(jobInfo.targetEndpoint).reply(400, {})
       await main(mockCloudwatchScheduledEvent, mockJobContext, callback)
     })
   })
@@ -213,7 +219,7 @@ describe('[' + jobInfo.id + '] ' + jobInfo.name, () => {
           mockLambdaReinvokeEvent.receiptHandle
         )
       }
-      mockTravilioAxios.onPost(jobInfo.targetEndpoint).reply(200, mockResponse.success)
+      mockRSIAxios.onPost(jobInfo.targetEndpoint).reply(200, mockRSIResponse.success)
       await main(mockLambdaReinvokeEvent, mockJobContext, callback)
     })
 
@@ -235,7 +241,7 @@ describe('[' + jobInfo.id + '] ' + jobInfo.name, () => {
           mockLambdaReinvokeEvent.receiptHandle
         )
       }
-      mockTravilioAxios.onPost(jobInfo.targetEndpoint).reply(200, mockResponse.fail)
+      mockRSIAxios.onPost(jobInfo.targetEndpoint).reply(200, mockRSIResponse.fail)
       await main(mockLambdaReinvokeEvent, mockJobContext, callback)
     })
 
@@ -257,7 +263,7 @@ describe('[' + jobInfo.id + '] ' + jobInfo.name, () => {
           mockLambdaReinvokeEvent.receiptHandle
         )
       }
-      mockTravilioAxios.onPost(jobInfo.targetEndpoint).networkError()
+      mockRSIAxios.onPost(jobInfo.targetEndpoint).networkError()
       await main(mockLambdaReinvokeEvent, mockJobContext, callback)
     })
 
@@ -286,12 +292,12 @@ describe('[' + jobInfo.id + '] ' + jobInfo.name, () => {
           mockJobContext.functionName
         )
       }
-      mockTravilioAxios.onPost(jobInfo.targetEndpoint).reply(() => {
+      mockRSIAxios.onPost(jobInfo.targetEndpoint).reply(() => {
         if (failCount < failMax) {
           failCount++
-          return [200, mockResponse.fail]
+          return [200, mockRSIResponse.fail]
         }
-        return [200, mockResponse.success]
+        return [200, mockRSIResponse.success]
       })
       await main(mockLambdaReinvokeEvent, mockJobContext, callback)
     })
@@ -316,7 +322,7 @@ describe('[' + jobInfo.id + '] ' + jobInfo.name, () => {
           mockLambdaReinvokeEvent.receiptHandle
         )
       }
-      mockTravilioAxios.onPost(jobInfo.targetEndpoint).reply(400, {})
+      mockRSIAxios.onPost(jobInfo.targetEndpoint).reply(400, {})
       await main(mockLambdaReinvokeEvent, mockJobContext, callback)
     })
 
@@ -339,7 +345,7 @@ describe('[' + jobInfo.id + '] ' + jobInfo.name, () => {
           mockLambdaReinvokeEvent.receiptHandle
         )
       }
-      mockTravilioAxios.onPost(jobInfo.targetEndpoint).reply(200, mockResponse.fail)
+      mockRSIAxios.onPost(jobInfo.targetEndpoint).reply(200, mockRSIResponse.fail)
       await main(localEvent, mockJobContext, callback)
     })
   })

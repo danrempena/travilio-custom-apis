@@ -8,5 +8,5 @@ export default {
     'crmMemberId': faker.random.number({ min: 1, max: 1999 }),
     'crmUserId': faker.random.number({ min: 1, max: 1999 })
   },
-  fail: { 'isSuccess': false, 'errors':  [ {'field': 'StoredProcedure', 'errorMessage': 'Email is already taken'}]}
+  fail: { 'isSuccess': false, 'errors': [{ 'field': 'StoredProcedure', 'errorMessage': 'Email is already taken' }] }
 }
