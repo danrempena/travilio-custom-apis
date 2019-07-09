@@ -12,7 +12,6 @@ import RSIAxios from '../lib/rsi-axios'
 import RSIExpected from '../lib/rsi-expected'
 import mppSQLAxios from '../lib/mpp-sql-adapter-axios'
 import helper from '../lib/helper'
-import { RSIAuthenticate } from '../lib/rsi-access-token'
 
 jest.mock('../lib/helper')
 
@@ -70,12 +69,9 @@ describe('[' + jobInfo.id + '] ' + jobInfo.name, () => {
 
     each(testCases).test('%s - should have proper data and format for client custom api', async (source, mockEvent) => {
       console.log(mockRSIAccessToken)
-      const rsiAccessToken = await RSIAuthenticate()
-      console.log(rsiAccessToken)
-      expect(rsiAccessToken).toEqual(mockRSIAccessToken)
       mockRSIAxios.onPost(jobInfo.targetEndpoint).reply(config => {
         expect(config.headers['Content-Type']).toEqual('application/json')
-        expect(config.headers['Authorization']).toEqual('Bearer ' + rsiAccessToken)
+        expect(config.headers['Authorization']).toEqual('Bearer ' + mockRSIAccessToken)
         const data = JSON.parse(config.data)
         const expectedFields = Object.keys(RSIExpected[jobInfo.targetEndpoint])
         const dataKeys = Object.keys(data)
