@@ -1,11 +1,13 @@
 import faker from 'faker'
+
 export default {
-  updateMembersPackage: (count = 1, defaults = {}) => {
+  updateMembersStatus: (count = 1, defaults = {}) => {
     const users = []
     for (let i = 0; i < count; i++) {
       users.push({
+        'isActive': true,
         'rsiId': faker.random.number({ min: 1, max: 1999 }),
-        'packageId': faker.random.number({ min: 1, max: 1999 }),
+        'blockReason': faker.name.jobDescriptor(),
         ...defaults
       })
     }

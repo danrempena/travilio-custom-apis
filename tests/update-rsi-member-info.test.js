@@ -3,11 +3,11 @@ import jwt from 'jsonwebtoken'
 import each from 'jest-each'
 import hash from 'object-hash'
 import faker from 'faker'
-import { RSISystemAddMemberHandler, jobInfo, main } from '../handlers/add-member-handler'
+import { RSISystemUpdateMemberInfoHandler, jobInfo, main } from '../handlers/update-member-info-handler'
 import * as mockCloudwatchScheduledEvent from '../mocks/events/cloudwatch-scheduled-event.json'
 import * as mockLambdaReinvokeEvent from '../mocks/events/lambda-reinvoke-event.json'
-import mockRSIRequest from '../mocks/rsi-system/add-member/request'
-import mockRSIResponse from '../mocks/rsi-system/add-member/response'
+import mockRSIRequest from '../mocks/rsi-system/update-member-info/request'
+import mockRSIResponse from '../mocks/rsi-system/update-member-info/response'
 import RSIAxios from '../lib/rsi-axios'
 import RSIExpected from '../lib/rsi-expected'
 import mppSQLAxios from '../lib/mpp-sql-adapter-axios'
@@ -25,7 +25,7 @@ describe('[' + jobInfo.id + '] ' + jobInfo.name, () => {
   const mockMsaLAxios = new MockAdapter(mppSQLAxios)
   const mockRSIAxios = new MockAdapter(RSIAxios)
   const mockJobContext = {
-    functionName: 'add-rsi-member',
+    functionName: 'update-rsi-member-info',
     localData: {
       jobInfo: jobInfo
     }
@@ -45,7 +45,7 @@ describe('[' + jobInfo.id + '] ' + jobInfo.name, () => {
   })
 
   beforeEach(() => {
-    mockMPPRequestData = mockRSIRequest.generateMembers(faker.random.number({ min: 1, max: 10 }))
+    mockMPPRequestData = mockRSIRequest.updateMemberInfo(faker.random.number({ min: 1, max: 10 }))
     mockMsaLAxios.onPost('/queries').reply(200, mockMPPRequestData)
     mockLambdaReinvokeEvent.payload = JSON.stringify(mockMPPRequestData)
     mockLambdaReinvokeEvent.md5Payload = hash.MD5(mockLambdaReinvokeEvent.payload)
@@ -62,15 +62,15 @@ describe('[' + jobInfo.id + '] ' + jobInfo.name, () => {
 
   describe('All Test Cases', () => {
     each(testCases).test('%s - mpp adapter should return list of users with format', async (source, mockEvent) => {
-      const handler = new RSISystemAddMemberHandler(mockEvent, mockJobContext)
+      const handler = new RSISystemUpdateMemberInfoHandler(mockEvent, mockJobContext)
       const data = await handler.getJobData()
       const expected = JSON.stringify(data)
       const mocked = JSON.stringify(mockMPPRequestData)
       expect(mocked).toEqual(expected)
     })
 
-    each(testCases).test('%s - should have proper data and format for client custom api', async (source, mockEvent) => {
-      mockRSIAxios.onPost(jobInfo.targetEndpoint).reply(config => {
+    each(testCases).test('%s - should have proper data and format for RSI custom api', async (source, mockEvent) => {
+      mockRSIAxios.onPut(jobInfo.targetEndpoint).reply(config => {
         expect(config.headers['Content-Type']).toEqual('application/json')
         expect(config.headers['Authorization']).toEqual('Bearer ' + mockRSIAccessToken)
         const data = JSON.parse(config.data)
@@ -84,9 +84,9 @@ describe('[' + jobInfo.id + '] ' + jobInfo.name, () => {
         }
         return [200, mockRSIResponse.success]
       })
-      const handler = new RSISystemAddMemberHandler(mockEvent, mockJobContext)
+      const handler = new RSISystemUpdateMemberInfoHandler(mockEvent, mockJobContext)
       await Promise.all(mockMPPRequestData.map(async (mockSampleData) => {
-        const { status, data } = await handler.addRSIMember(mockSampleData)
+        const { status, data } = await handler.updateRSIMemberInfo(mockSampleData)
         expect(status).toEqual(200)
         expect(data).toEqual(mockRSIResponse.success)
       }))
@@ -98,7 +98,7 @@ describe('[' + jobInfo.id + '] ' + jobInfo.name, () => {
       if (source === 'aws.lambda') {
         localEvent.payload = ''
       }
-      const handler = new RSISystemAddMemberHandler(localEvent, mockJobContext)
+      const handler = new RSISystemUpdateMemberInfoHandler(localEvent, mockJobContext)
       const callback = (error, result) => {
         expect(error).toBeTruthy()
         expect(helper.notify_on_error).toHaveBeenCalledTimes(1)
@@ -126,7 +126,7 @@ describe('[' + jobInfo.id + '] ' + jobInfo.name, () => {
           expect(suc).toHaveProperty('result')
         })
       }
-      mockRSIAxios.onPost(jobInfo.targetEndpoint).reply(200, mockRSIResponse.success)
+      mockRSIAxios.onPut(jobInfo.targetEndpoint).reply(200, mockRSIResponse.success)
       await main(mockCloudwatchScheduledEvent, mockJobContext, callback)
     })
 
@@ -149,7 +149,7 @@ describe('[' + jobInfo.id + '] ' + jobInfo.name, () => {
           mockJobContext.functionName
         )
       }
-      mockRSIAxios.onPost(jobInfo.targetEndpoint).reply(200, mockRSIResponse.fail)
+      mockRSIAxios.onPut(jobInfo.targetEndpoint).reply(200, mockRSIResponse.fail)
       await main(mockCloudwatchScheduledEvent, mockJobContext, callback)
     })
 
@@ -172,7 +172,7 @@ describe('[' + jobInfo.id + '] ' + jobInfo.name, () => {
           mockJobContext.functionName
         )
       }
-      mockRSIAxios.onPost(jobInfo.targetEndpoint).networkError()
+      mockRSIAxios.onPut(jobInfo.targetEndpoint).networkError()
       await main(mockCloudwatchScheduledEvent, mockJobContext, callback)
     })
 
@@ -192,7 +192,7 @@ describe('[' + jobInfo.id + '] ' + jobInfo.name, () => {
         expect(helper.notify_on_failed_queue).toHaveBeenCalledTimes(1)
         expect(helper.enqueue_failed_job).not.toHaveBeenCalled()
       }
-      mockRSIAxios.onPost(jobInfo.targetEndpoint).reply(400, {})
+      mockRSIAxios.onPut(jobInfo.targetEndpoint).reply(400, {})
       await main(mockCloudwatchScheduledEvent, mockJobContext, callback)
     })
   })
@@ -216,7 +216,7 @@ describe('[' + jobInfo.id + '] ' + jobInfo.name, () => {
           mockLambdaReinvokeEvent.receiptHandle
         )
       }
-      mockRSIAxios.onPost(jobInfo.targetEndpoint).reply(200, mockRSIResponse.success)
+      mockRSIAxios.onPut(jobInfo.targetEndpoint).reply(200, mockRSIResponse.success)
       await main(mockLambdaReinvokeEvent, mockJobContext, callback)
     })
 
@@ -238,7 +238,7 @@ describe('[' + jobInfo.id + '] ' + jobInfo.name, () => {
           mockLambdaReinvokeEvent.receiptHandle
         )
       }
-      mockRSIAxios.onPost(jobInfo.targetEndpoint).reply(200, mockRSIResponse.fail)
+      mockRSIAxios.onPut(jobInfo.targetEndpoint).reply(200, mockRSIResponse.fail)
       await main(mockLambdaReinvokeEvent, mockJobContext, callback)
     })
 
@@ -260,7 +260,7 @@ describe('[' + jobInfo.id + '] ' + jobInfo.name, () => {
           mockLambdaReinvokeEvent.receiptHandle
         )
       }
-      mockRSIAxios.onPost(jobInfo.targetEndpoint).networkError()
+      mockRSIAxios.onPut(jobInfo.targetEndpoint).networkError()
       await main(mockLambdaReinvokeEvent, mockJobContext, callback)
     })
 
@@ -289,7 +289,7 @@ describe('[' + jobInfo.id + '] ' + jobInfo.name, () => {
           mockJobContext.functionName
         )
       }
-      mockRSIAxios.onPost(jobInfo.targetEndpoint).reply(() => {
+      mockRSIAxios.onPut(jobInfo.targetEndpoint).reply(() => {
         if (failCount < failMax) {
           failCount++
           return [200, mockRSIResponse.fail]
@@ -319,7 +319,7 @@ describe('[' + jobInfo.id + '] ' + jobInfo.name, () => {
           mockLambdaReinvokeEvent.receiptHandle
         )
       }
-      mockRSIAxios.onPost(jobInfo.targetEndpoint).reply(400, {})
+      mockRSIAxios.onPut(jobInfo.targetEndpoint).reply(400, {})
       await main(mockLambdaReinvokeEvent, mockJobContext, callback)
     })
 
@@ -342,7 +342,7 @@ describe('[' + jobInfo.id + '] ' + jobInfo.name, () => {
           mockLambdaReinvokeEvent.receiptHandle
         )
       }
-      mockRSIAxios.onPost(jobInfo.targetEndpoint).reply(200, mockRSIResponse.fail)
+      mockRSIAxios.onPut(jobInfo.targetEndpoint).reply(200, mockRSIResponse.fail)
       await main(localEvent, mockJobContext, callback)
     })
   })

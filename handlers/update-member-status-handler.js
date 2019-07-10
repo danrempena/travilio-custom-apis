@@ -1,10 +1,8 @@
 import AbstractHandler from './abstract-handler'
 import helper from '../lib/helper'
 import RSIAxios from '../lib/rsi-axios'
-import RSIExpected from '../lib/rsi-expected'
-import merge from 'deepmerge'
 
-export class RSISystemAddMemberHandler extends AbstractHandler {
+export class RSISystemUpdateMemberStatusHandler extends AbstractHandler {
   async main (callback) {
     try {
       const jobData = await this.getJobData()
@@ -14,8 +12,8 @@ export class RSISystemAddMemberHandler extends AbstractHandler {
         const self = this
         await Promise.all(jobData.map(async (user) => {
           try {
-            const { data: createResult } = await self.addRSIMember(user)
-            self._successQueue.push({ data: user, result: createResult })
+            const { data: updateResult } = await self.updateRSIMemberStatus(user)
+            self._successQueue.push({ data: user, result: updateResult })
           } catch (error) {
             console.error('Failure for: ', user, '\nError: ', error)
             if (self.isClientError(error)) {
@@ -48,17 +46,13 @@ export class RSISystemAddMemberHandler extends AbstractHandler {
     }
   }
 
-  async addRSIMember (user) {
+  async updateRSIMemberStatus (user) {
     const jobInfo = this.getContextLocalData('jobInfo')
-    const RSIMember = merge(RSIExpected[jobInfo.targetEndpoint], user, {
-      customMerge: (key) => {
-        if (!user[key]) {
-          return RSIExpected[jobInfo.targetEndpoint][key]
-        }
-      }
-    })
-    const response = await RSIAxios.post(jobInfo.targetEndpoint, RSIMember)
-    console.log('Add Request:\n', RSIAxios.defaults.baseURL + jobInfo.targetEndpoint, '\n', RSIMember)
+    const rsiId = user.rsiId
+    const dataRequest = { isActive: user.isActive, blockReason: user.blockReason }
+    const updateUrlPath = jobInfo.targetEndpoint.replace('[rsi_id]', rsiId)
+    const response = await RSIAxios.put(updateUrlPath, dataRequest)
+    console.log('Add Request:\n', RSIAxios.defaults.baseURL + jobInfo.targetEndpoint, '\n', dataRequest)
     console.log('Add Response:\n', RSIAxios.defaults.baseURL + jobInfo.targetEndpoint, '\n',
       response.hasOwnProperty('data') && response.data ? response.data : response)
     if (response.hasOwnProperty('data') && response.data.isSuccess) {
@@ -69,17 +63,16 @@ export class RSISystemAddMemberHandler extends AbstractHandler {
 }
 
 export const jobInfo = {
-  id: 'rsiSystemAddUser',
-  name: 'Add MPP user to RSI System API',
-  query: 'EXEC [dbo].[RSI_AddUser]',
-  usersQuery: '',
-  targetEndpoint: '/member/'
+  id: 'rsiSystemUpdateUserStatus',
+  name: 'Update MPP user status to RSI System API',
+  query: 'EXEC [dbo].[RSI_UserStatusChange]',
+  targetEndpoint: '/member/[rsi_id]/activestatus'
 }
 
 export const main = async (event, context, callback) => {
   context['localData'] = {
     jobInfo: jobInfo
   }
-  const handler = new RSISystemAddMemberHandler(event, context)
+  const handler = new RSISystemUpdateMemberStatusHandler(event, context)
   await handler.main(callback)
 }
