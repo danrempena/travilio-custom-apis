@@ -3,6 +3,7 @@ import helper from '../lib/helper'
 import RSIAxios from '../lib/rsi-axios'
 import RSIExpected from '../lib/rsi-expected'
 import merge from 'deepmerge'
+import mppSQLAxios from '../lib/mpp-sql-adapter-axios'
 
 export class RSISystemAddMemberHandler extends AbstractHandler {
   async main (callback) {
@@ -15,7 +16,19 @@ export class RSISystemAddMemberHandler extends AbstractHandler {
         await Promise.all(jobData.map(async (user) => {
           try {
             const { data: createResult } = await self.addRSIMember(user)
-            self._successQueue.push({ data: user, result: createResult })
+            try {
+              if (createResult) {
+                await self.sendUserToMpp(createResult, user)
+              }
+              self._successQueue.push({ data: user, result: createResult })
+            } catch (error) {
+              console.error('Failure for: ', user, '\nError: ', error)
+              if (self.isClientError(error)) {
+                self._notifyQueue.push({ data: user, error: error })
+              } else {
+                self._failedQueue.push({ data: user, error: error })
+              }
+            }
           } catch (error) {
             console.error('Failure for: ', user, '\nError: ', error)
             if (self.isClientError(error)) {
@@ -66,13 +79,37 @@ export class RSISystemAddMemberHandler extends AbstractHandler {
     }
     throw new Error(JSON.stringify(response.data))
   }
+
+  async sendUserToMpp (userResponse, userRequest) {
+    const jobInfo = this.getContextLocalData('jobInfo')
+    if (jobInfo.usersQuery && userRequest.clubReferenceId) {
+      const response = await mppSQLAxios.post('/queries', {
+        query: jobInfo.usersQuery,
+        options: {
+          type: 'SELECT',
+          bind: {
+            clubReferenceId: userRequest.clubReferenceId,
+            rsiMemberId: userResponse.rsiMemberId,
+            vipMemberId: userResponse.vipMemberId,
+            crmMemberId: userResponse.crmMemberId,
+            crmUserId: userResponse.crmUserId
+          }
+        }
+      })
+      console.log(response)
+      if (response.hasOwnProperty('data') && response.data) {
+        return response
+      }
+      throw new Error(JSON.stringify(response.data))
+    }
+  }
 }
 
 export const jobInfo = {
   id: 'rsiSystemAddUser',
   name: 'Add MPP user to RSI System API',
   query: 'EXEC [dbo].[RSI_AddUser]',
-  usersQuery: '',
+  usersQuery: 'EXEC [dbo].[RSI_InboundUser] @commid=@clubReferenceId @rsiMemberId=@rsiMemberId @vipMemberId=@vipMemberId @crmMemberId=@crmMemberId @crmUserId=@crmUserId',
   targetEndpoint: '/member/'
 }
 
