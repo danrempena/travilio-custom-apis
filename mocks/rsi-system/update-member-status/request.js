@@ -5,8 +5,8 @@ export default {
     const users = []
     for (let i = 0; i < count; i++) {
       users.push({
+        'rsiMemberId': faker.random.number({ min: 1, max: 1999 }),
         'isActive': true,
-        'rsiId': faker.random.number({ min: 1, max: 1999 }),
         'blockReason': faker.name.jobDescriptor(),
         ...defaults
       })

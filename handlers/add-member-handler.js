@@ -63,15 +63,28 @@ export class RSISystemAddMemberHandler extends AbstractHandler {
 
   async addRSIMember (user) {
     const jobInfo = this.getContextLocalData('jobInfo')
-    const RSIMember = merge(RSIExpected[jobInfo.targetEndpoint], user, {
+    let rsiUpdate = { ...user }
+    if (rsiUpdate.hasOwnProperty('email_1')) {
+      if (rsiUpdate.email_1) {
+        rsiUpdate.email1 = rsiUpdate.email_1
+      }
+      delete rsiUpdate.email_1
+    }
+    if (rsiUpdate.hasOwnProperty('phone_1')) {
+      if (rsiUpdate.phone_1) {
+        rsiUpdate.phone1 = rsiUpdate.phone_1
+      }
+      delete rsiUpdate.phone_1
+    }
+    rsiUpdate = merge(RSIExpected[jobInfo.targetEndpoint], rsiUpdate, {
       customMerge: (key) => {
-        if (!user[key]) {
+        if (!rsiUpdate[key]) {
           return RSIExpected[jobInfo.targetEndpoint][key]
         }
       }
     })
-    const response = await RSIAxios.post(jobInfo.targetEndpoint, RSIMember)
-    console.log('Add Request:\n', RSIAxios.defaults.baseURL + jobInfo.targetEndpoint, '\n', RSIMember)
+    const response = await RSIAxios.post(jobInfo.targetEndpoint, rsiUpdate)
+    console.log('Add Request:\n', RSIAxios.defaults.baseURL + jobInfo.targetEndpoint, '\n', rsiUpdate)
     console.log('Add Response:\n', RSIAxios.defaults.baseURL + jobInfo.targetEndpoint, '\n',
       response.hasOwnProperty('data') && response.data ? response.data : response)
     if (response.hasOwnProperty('data') && response.data.isSuccess) {
@@ -83,24 +96,24 @@ export class RSISystemAddMemberHandler extends AbstractHandler {
   async sendUserToMpp (userResponse, userRequest) {
     const jobInfo = this.getContextLocalData('jobInfo')
     if (jobInfo.usersQuery && userRequest.clubReferenceId) {
-      const response = await mppSQLAxios.post('/queries', {
+      const bindParams = {
+        clubReferenceId: userRequest.clubReferenceId,
+        rsiMemberId: userResponse.rsiMemberId,
+        vipMemberId: userResponse.vipMemberId,
+        crmMemberId: userResponse.crmMemberId,
+        crmUserId: userResponse.crmUserId
+      }
+      const { data } = await mppSQLAxios.post('/queries', {
         query: jobInfo.usersQuery,
         options: {
-          type: 'SELECT',
-          bind: {
-            clubReferenceId: userRequest.clubReferenceId,
-            rsiMemberId: userResponse.rsiMemberId,
-            vipMemberId: userResponse.vipMemberId,
-            crmMemberId: userResponse.crmMemberId,
-            crmUserId: userResponse.crmUserId
-          }
+          type: 'INSERT',
+          bind: bindParams
         }
       })
-      console.log(response)
-      if (response.hasOwnProperty('data') && response.data) {
-        return response
+      if (data.length === 2 && parseInt(data[1]) !== 1) {
+        throw new Error(JSON.stringify(data) + '\n' + JSON.stringify(bindParams))
       }
-      throw new Error(JSON.stringify(response.data))
+      return data
     }
   }
 }

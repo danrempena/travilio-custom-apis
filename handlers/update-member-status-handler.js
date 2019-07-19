@@ -48,7 +48,7 @@ export class RSISystemUpdateMemberStatusHandler extends AbstractHandler {
 
   async updateRSIMemberStatus (user) {
     const jobInfo = this.getContextLocalData('jobInfo')
-    const rsiId = user.rsiId
+    const rsiId = user.rsiMemberId
     const dataRequest = { isActive: user.isActive, blockReason: user.blockReason }
     const updateUrlPath = jobInfo.targetEndpoint.replace('[rsi_id]', rsiId)
     const response = await RSIAxios.put(updateUrlPath, dataRequest)

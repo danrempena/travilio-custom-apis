@@ -10,6 +10,8 @@ export default {
         'memberPassword': hash.MD5(faker.internet.password()),
         'firstName': faker.name.firstName(),
         'lastName': faker.name.lastName(),
+        'email_1': faker.internet.email(),
+        'phone_1': faker.phone.phoneNumberFormat(),
         'clubReferenceId': faker.random.number({ min: 1, max: 1999 }),
         'packageId': faker.random.number({ min: 1, max: 1999 }),
         ...defaults
