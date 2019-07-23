@@ -22,7 +22,7 @@ describe('[' + jobInfo.id + '] ' + jobInfo.name, () => {
   ]
   const mockMsaAccessToken = jwt.sign({ userId: 1 }, 'secret', { expiresIn: '30d' })
   const mockRSIAccessToken = jwt.sign({ userId: 1 }, 'secret')
-  const mockMsaLAxios = new MockAdapter(mppSQLAxios)
+  const mockMPPAxios = new MockAdapter(mppSQLAxios)
   const mockRSIAxios = new MockAdapter(RSIAxios)
   const mockJobContext = {
     functionName: 'add-rsi-member',
@@ -46,7 +46,18 @@ describe('[' + jobInfo.id + '] ' + jobInfo.name, () => {
 
   beforeEach(() => {
     mockMPPRequestData = mockRSIRequest.generateMembers(faker.random.number({ min: 1, max: 10 }))
-    mockMsaLAxios.onPost('/queries').reply(200, mockMPPRequestData)
+    mockMPPAxios.onPost('/queries').reply(200, mockMPPRequestData)
+    mockMPPAxios.onPost('/queries').reply(config => {
+      const data = JSON.parse(config.data)
+      if (data.query === jobInfo.usersQuery &&
+        Boolean(data.options.bind.commid) && Boolean(data.options.bind.rsiMemberId)) {
+        return [200, [null, 1]]
+      } else if (data.query === jobInfo.query) {
+        return [200, mockMPPRequestData]
+      } else {
+        return [400, 'Invalid Query!']
+      }
+    })
     mockLambdaReinvokeEvent.payload = JSON.stringify(mockMPPRequestData)
     mockLambdaReinvokeEvent.md5Payload = hash.MD5(mockLambdaReinvokeEvent.payload)
     mockLambdaReinvokeEvent.retries = 1
@@ -56,7 +67,7 @@ describe('[' + jobInfo.id + '] ' + jobInfo.name, () => {
   afterEach(() => {
     jest.clearAllMocks()
     mockRSIAxios.reset()
-    mockMsaLAxios.reset()
+    mockMPPAxios.reset()
     mockMPPRequestData = []
   })
 
@@ -92,8 +103,25 @@ describe('[' + jobInfo.id + '] ' + jobInfo.name, () => {
       }))
     })
 
+    each(testCases).test('%s - should call update query successfully on MPP after successful creation of user', async (source, mockEvent) => {
+      mockRSIAxios.onPost(jobInfo.targetEndpoint).reply(200, mockRSIResponse.success)
+      const handler = new RSISystemAddMemberHandler(mockEvent, mockJobContext)
+      handler.sendUserToMpp = jest.fn(handler.sendUserToMpp)
+      const callback = (error, result) => {
+        expect(error).toBeNull()
+        expect(result).toHaveProperty('fail')
+        expect(result).toHaveProperty('success')
+        expect(result).toHaveProperty('notify')
+        expect(result.fail).toHaveLength(0)
+        expect(result.notify).toHaveLength(0)
+        expect(result.success).toHaveLength(mockMPPRequestData.length)
+        expect(handler.sendUserToMpp).toHaveBeenCalledTimes(mockMPPRequestData.length)
+      }
+      await handler.main(callback)
+    })
+
     each(testCases).test('%s - should be able to send email notifications for errors upon MPP query', async (source, mockEvent) => {
-      mockMsaLAxios.onPost('/queries').networkError()
+      mockMPPAxios.onPost('/queries').networkError()
       const localEvent = { ...mockEvent }
       if (source === 'aws.lambda') {
         localEvent.payload = ''

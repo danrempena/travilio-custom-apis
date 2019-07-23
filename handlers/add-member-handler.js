@@ -97,7 +97,7 @@ export class RSISystemAddMemberHandler extends AbstractHandler {
     const jobInfo = this.getContextLocalData('jobInfo')
     if (jobInfo.usersQuery && userRequest.clubReferenceId) {
       const bindParams = {
-        clubReferenceId: userRequest.clubReferenceId,
+        commid: userRequest.clubReferenceId,
         rsiMemberId: userResponse.rsiMemberId,
         vipMemberId: userResponse.vipMemberId,
         crmMemberId: userResponse.crmMemberId,
@@ -106,7 +106,7 @@ export class RSISystemAddMemberHandler extends AbstractHandler {
       const { data } = await mppSQLAxios.post('/queries', {
         query: jobInfo.usersQuery,
         options: {
-          type: 'INSERT',
+          type: 'UPDATE',
           bind: bindParams
         }
       })
