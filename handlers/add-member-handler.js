@@ -110,7 +110,7 @@ export class RSISystemAddMemberHandler extends AbstractHandler {
           bind: bindParams
         }
       })
-      if (data.length === 2 && parseInt(data[1]) !== 1) {
+      if (data.length === 2 && parseInt(data[1]) !== 0) {
         throw new Error(JSON.stringify(data) + '\n' + JSON.stringify(bindParams))
       }
       return data
@@ -122,7 +122,7 @@ export const jobInfo = {
   id: 'rsiSystemAddUser',
   name: 'Add MPP user to RSI System API',
   query: 'EXEC [dbo].[RSI_AddUser]',
-  usersQuery: 'EXEC [dbo].[RSI_InboundUser] @commid=@clubReferenceId @rsiMemberId=@rsiMemberId @vipMemberId=@vipMemberId @crmMemberId=@crmMemberId @crmUserId=@crmUserId',
+  usersQuery: 'EXEC [dbo].[RSI_InboundUser] @commid=$commid, @rsiMemberId=$rsiMemberId, @vipMemberId=$vipMemberId, @crmMemberId=$crmMemberId, @crmUserId=$crmUserId',
   targetEndpoint: '/member/'
 }
 

@@ -7,7 +7,6 @@ plugins:
   - serverless-pseudo-parameters
 
 # serverless-webpack configuration
-# TODO: Update [client-name] with client name.
 # Enable auto-packing of external modules
 custom:
   stage: ${opt:stage, self:provider.stage}
@@ -40,18 +39,33 @@ provider:
         - sns:Publish
       Resource:
         - "arn:aws:sns:#{AWS::Region}:#{AWS::AccountId}:${self:custom.snsTopicName}"
-        - 'Fn::ImportValue': 'MPPClientsInternalTopicArn-${self:custom.stage}'
-    - Effect: Allow
-      Action:
-        - sqs:DeleteMessage
-        - sqs:GetQueueUrl
-        - sqs:SendMessage
-        - sqs:GetQueueAttributes
-        - sqs:ChangeMessageVisibility
-      Resource:
-        - 'Fn::ImportValue': 'LambdaRetriesQueueArn-${self:custom.stage}'
+#        - 'Fn::ImportValue': 'MPPClientsInternalTopicArn-${self:custom.stage}'
+#    - Effect: Allow
+#      Action:
+#        - sqs:DeleteMessage
+#        - sqs:GetQueueUrl
+#        - sqs:SendMessage
+#        - sqs:GetQueueAttributes
+#        - sqs:ChangeMessageVisibility
+#      Resource:
+#        - 'Fn::ImportValue': 'LambdaRetriesQueueArn-${self:custom.stage}'
 functions:
-# TODO: Put handler functions here...
+  rsiAddMember:
+    handler: handlers/add-member-handler.main
+    timeout: 60
+    reservedConcurrency: 1
+  #      events:
+  #          - schedule: rate(5 minutes)
+  rsiUpdateMemberInfo:
+    handler: handlers/update-member-info-handler.main
+    timeout: 30
+    reservedConcurrency: 1
+  #      events:
+  #          - schedule: rate(5 minutes)
+  rsiUpdateMemberStatus:
+    handler: handlers/update-member-status-handler.main
+    timeout: 30
+    reservedConcurrency: 1
 
 resources:
   - ${file(resources/sns-topic.yml)}
